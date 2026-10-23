@@ -1,0 +1,15 @@
+<Solution>
+    <Configurations>
+        <Platform Name="x64" />
+        <Platform Name="ARM64" />
+    </Configurations>
+    <Folder Name="/ﾆﾗ/">
+        <File Path="Directory.Build.props" />
+        <File Path="Directory.Packages.props" />
+        <File Path="run.ps1" />
+    </Folder>
+    <Project Path="ConsolePlayground/ConsolePlayground.csproj">
+        <Platform Solution="*|x64" Project="x64" />
+        <Platform Solution="*|ARM64" Project="ARM64" />
+    </Project>
+</Solution>

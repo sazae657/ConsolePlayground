@@ -1,0 +1,20 @@
+{
+  "profiles": {
+    "WSL": {
+      "commandName": "WSL2",
+      "distributionName": ""
+    },
+    "Window": {
+      "commandName": "Project",
+      "commandLineArgs": "--list-window\r\n--info\r\n-m  \"window://0x00070360\"\r\n-f \"$(MSBuildProjectDirectory)\\..\\ffmpeg\\bin\\x64\"\r\n--sixel\r\n"
+    },
+    "Movie": {
+      "commandName": "Project",
+      "commandLineArgs": "--info\r\n-m \"$(MSBuildProjectDirectory)\\..\\Datum\\INMU_KING_YAJU-MC.mkv\"\r\n-f \"$(MSBuildProjectDirectory)\\..\\ffmpeg\\bin\\x64\"\r\n--sixel\r\n--record \"$(MSBuildProjectDirectory)\\..\\Datum\\record.txt\"\r\n--record-format base64\r\n--listen 127.0.0.1:3128"
+    },
+    "Monitor": {
+      "commandName": "Project",
+      "commandLineArgs": "--info\r\n-m  \"m://DISPLAY2\"\r\n-f \"$(MSBuildProjectDirectory)\\..\\ffmpeg\\bin\\x64\"\r\n--color\r\n"
+    }
+  }
+}

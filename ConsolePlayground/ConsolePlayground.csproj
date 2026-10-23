@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>$(NetCoreAppTarget)</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+		<Platforms>x64;ARM64</Platforms>
+		<CsWinRTAotOptimizerEnabled>true</CsWinRTAotOptimizerEnabled>
+	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="System.CommandLine" />
+		<PackageReference Include="FFmpeg.AutoGen" />
+		<PackageReference Include="SkiaSharp" />
+		<!-- Linux用のネイティブライブラリ。フォント描画は使わないのでfontconfig非依存版 -->
+		<PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
+	</ItemGroup>
+</Project>

@@ -1,0 +1,16 @@
+<Project>
+	<Choose>
+		<!-- COMとか使うのでWindowsだけ別 -->
+		<When Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+			<PropertyGroup>
+				<NetCoreAppTarget>net10.0-windows10.0.26100.0</NetCoreAppTarget>
+			</PropertyGroup>
+		</When>
+
+		<Otherwise>
+			<PropertyGroup>
+				<NetCoreAppTarget>net10.0</NetCoreAppTarget>
+			</PropertyGroup>
+		</Otherwise>
+	</Choose>
+</Project>
