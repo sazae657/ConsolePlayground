@@ -20,6 +20,9 @@ internal class App
 
     internal static RootCommand CreateCommand()
     {
+        var movies = new Option<string[]>("--movie", ["-m"]) {
+            Description = "動画またはウインドウまたはモニター"
+        };
         var characters = new Option<string>("--characters", ["-c"]) {
             DefaultValueFactory = _ => " `.:-=;*?+#%@",
             Description = "ASCII表示に使用する文字"
@@ -56,10 +59,9 @@ internal class App
             Description = "無限"
         };
 
-        var movies = new Option<string[]>("--movie", [ "-m"]) {
-            Description = "動画"
+        var ffmpegPath = new Option<string>("--ffmpeg", ["-f"]) {
+            Description = "ffmpegのパス"
         };
-        var ffmpegPath = new Option<string>("--ffmpeg", ["-f"]);
         var renderer = new Option<string>("--renderer") {
             DefaultValueFactory = _ => "ascii",
             Description = "描画方式: ascii か sixel"
@@ -82,7 +84,7 @@ internal class App
         var recordFormat = new Option<RecordingFormat>("--record-format")
         {
             Description = "保存形式",
-            DefaultValueFactory = _ => RecordingFormat.Text
+            DefaultValueFactory = _ => RecordingFormat.BSV
         };
 
         var showInfo = new Option<bool>("--info") {
@@ -132,6 +134,8 @@ internal class App
 #endif
 
         var root = new RootCommand(nameof(ConsolePlayground)) {
+            movies,
+            renderer,
             characters,
             color,
             fill,
@@ -139,9 +143,7 @@ internal class App
             boxDrawing, boxRound, boxFill, boxThin, boxNoDiagonal,
             sixel,
             infinite,
-            movies,
             ffmpegPath,
-            renderer,
             width,
             height,
             record,
