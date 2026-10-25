@@ -8,15 +8,17 @@ internal static class SixelQuantizer
     /// 減色(死ぬほど重い)
     /// </summary>
     /// <param name="bitmap"></param>
+    /// <param name="colors">パレットの最大色数(2～256)</param>
     /// <returns></returns>
-    internal static (SKColor[] Palette, byte[] Pixels) Quantize(SKBitmap bitmap)
+    internal static (SKColor[] Palette, byte[] Pixels) Quantize(SKBitmap bitmap, int colors = SixelEncoder.MaximumColors)
     {
+        SixelEncoder.ValidateColors(colors, nameof(colors));
         var source = bitmap.Pixels;
         var exact = new Dictionary<SKColor, byte>();
         foreach (var color in source) {
             var rounded = ToDisplayColor(color.Red, color.Green, color.Blue);
             if (!exact.ContainsKey(rounded)) {
-                if (exact.Count == 256) {
+                if (exact.Count == colors) {
                     break;
                 }
                 exact.Add(rounded, (byte)exact.Count);
@@ -41,7 +43,7 @@ internal static class SixelQuantizer
             bin.Blue += color.Blue;
         }
         var boxes = new List<Box> { new(histogram.Where(bin => bin.Count > 0).ToArray()) };
-        while (boxes.Count < 256) {
+        while (boxes.Count < colors) {
             var candidate = boxes.Where(box => box.Bins.Length > 1).MaxBy(box => box.Score);
             if (candidate is null) {
                 break;

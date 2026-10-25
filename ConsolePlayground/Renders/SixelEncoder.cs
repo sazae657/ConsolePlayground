@@ -7,8 +7,11 @@ namespace ConsolePlayground.Cmd.Renders;
 public static class SixelEncoder
 {
     public const int MaximumDimension = 4096;
+    public const int MinimumColors = 2;
+    public const int MaximumColors = 256;
 
-    public static string Encode(SKBitmap frame, int maxWidth, int maxHeight, bool colorReduction = false)
+    /// <param name="colors">減色後の色数(2～256)。null なら固定パレット</param>
+    public static string Encode(SKBitmap frame, int maxWidth, int maxHeight, int? colors = null)
     {
         ArgumentNullException.ThrowIfNull(frame);
         if (frame.Width <= 0 || frame.Height <= 0 || frame.GetPixels() == IntPtr.Zero) {
@@ -16,6 +19,9 @@ public static class SixelEncoder
         }
         ValidateDimension(maxWidth, nameof(maxWidth));
         ValidateDimension(maxHeight, nameof(maxHeight));
+        if (colors is { } requested) {
+            ValidateColors(requested, nameof(colors));
+        }
 
         // 縦横比を保ったまま枠いっぱいにリサイズ
         int width;
@@ -35,7 +41,7 @@ public static class SixelEncoder
             canvas.DrawImage(image, new SKRect(0, 0, width, height), new SKSamplingOptions(SKFilterMode.Linear));
         }
 
-        var (palette, pixels) = colorReduction ? SixelQuantizer.Quantize(bitmap) : QuantizeFixed(bitmap);
+        var (palette, pixels) = colors is { } reduced ? SixelQuantizer.Quantize(bitmap, reduced) : QuantizeFixed(bitmap);
         var usedColors = new bool[palette.Length];
         foreach (byte index in pixels) {
             usedColors[index] = true;
@@ -140,6 +146,13 @@ public static class SixelEncoder
     {
         if (value < 1 || value > MaximumDimension) {
             throw new ArgumentOutOfRangeException(name, $"寸法は1～{MaximumDimension}で指定");
+        }
+    }
+
+    internal static void ValidateColors(int value, string name)
+    {
+        if (value < MinimumColors || value > MaximumColors) {
+            throw new ArgumentOutOfRangeException(name, $"色数は{MinimumColors}～{MaximumColors}で指定");
         }
     }
 

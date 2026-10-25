@@ -14,7 +14,7 @@ ConsolePlayground [options]
   --box-round                          罫線の角を角丸にする(--box用)
   --box-fill                           線の無い所を --characters の文字で明るさに応じて塗る(--box用)
   --box-thin                           太線を使わない(--box用)
-  --box-no-diagonal                    斜線 ?? を使わない(--box用)
+  --box-no-diagonal                    斜線 ╱╲ を使わない(--box用)
   --sixel                              sixelで表示(--renderer sixelと等価)
   --infinite                           無限
   -f, --ffmpeg <ffmpeg>                ffmpegのパス
@@ -23,7 +23,7 @@ ConsolePlayground [options]
   --record <record>                    テキストに保存
   --record-format <Base64|BSV|Text>    保存形式 [default: BSV]
   --info                               情報表示
-  --color-reduction                    Sixelでまあまあな品質の256色減色を使う(死ぬほど重い)
+  --color-reduction <color-reduction>  Sixelでまあまあな品質の減色を使う。色数は2～256(省略時256色、死ぬほど重い)
   --listen <listen>                    TCP待ち受け(IP:Port)
   --listen-remote                      ループバック以外での待ち受けを許可する(プレーンテキストでダダ漏れ注意)
   --headless                           レンダリングするだけ(表示しない)
