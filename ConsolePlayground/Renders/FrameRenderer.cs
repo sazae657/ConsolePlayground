@@ -6,7 +6,8 @@ namespace ConsolePlayground.Cmd.Renders;
 internal enum RenderMode
 {
     Ascii,
-    Sixel
+    Sixel,
+    Kitty
 }
 
 internal interface IFrameRenderer
@@ -94,9 +95,19 @@ internal sealed class AsciiFrameRenderer(bool color, bool fill, RenderParams ren
 }
 
 // probe はヘッドレス時は null(端末へ問い合わせない)
-// colorReduction は減色後の色数、null なら固定パレット
-internal sealed class SixelFrameRenderer(int? maxWidth, int? maxHeight, TerminalSizeProbe? probe, RenderParams renderParam, int? colorReduction = null) : IFrameRenderer
+// encoder は (フレーム, 最大幅, 最大高さ) から画像のエスケープシーケンスを作る
+internal sealed class ImageFrameRenderer(int? maxWidth, int? maxHeight, TerminalSizeProbe? probe, RenderParams renderParam,
+    Func<SKBitmap, int, int, string> encoder) : IFrameRenderer
 {
+    // colorReduction は減色後の色数、null なら固定パレット
+    public static ImageFrameRenderer Sixel(int? maxWidth, int? maxHeight, TerminalSizeProbe? probe, RenderParams renderParam,
+        int? colorReduction = null)
+        => new(maxWidth, maxHeight, probe, renderParam,
+            (frame, width, height) => SixelEncoder.Encode(frame, width, height, colorReduction));
+
+    public static ImageFrameRenderer Kitty(int? maxWidth, int? maxHeight, TerminalSizeProbe? probe, RenderParams renderParam)
+        => new(maxWidth, maxHeight, probe, renderParam, KittyEncoder.Encode);
+
     bool record = false;
     List<string> recordBuffer = new();
 
@@ -114,9 +125,9 @@ internal sealed class SixelFrameRenderer(int? maxWidth, int? maxHeight, Terminal
     public string Encode(SKBitmap frame)
     {
         probe?.Poll();
-        var bounds = SixelDisplaySize.Calculate(
+        var bounds = ImageDisplaySize.Calculate(
             renderParam.RenderWidth, renderParam.RenderHeight, probe?.CellSize, maxWidth, maxHeight);
-        return bounds is { } size ? SixelEncoder.Encode(frame, size.Width, size.Height, colorReduction) : string.Empty;
+        return bounds is { } size ? encoder(frame, size.Width, size.Height) : string.Empty;
     }
 
     public void Render(string frame, int index, TimeSpan timestamp, double frameRate)

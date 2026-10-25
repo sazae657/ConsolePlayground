@@ -78,8 +78,8 @@ internal sealed class Jussen : IAsyncDisposable
     private readonly int? colorReduction;
     private readonly bool infinite;
     private readonly RenderMode renderMode;
-    private readonly int? sixelWidth;
-    private readonly int? sixelHeight;
+    private readonly int? imageWidth;
+    private readonly int? imageHeight;
     private readonly Stopwatch elaptingGk = new();
     /// <summary>
     /// 記録先
@@ -119,7 +119,7 @@ internal sealed class Jussen : IAsyncDisposable
     readonly Regex WCLASS = new Regex(@"\A0x[0-9A-Fa-f]+\Z", RegexOptions.Compiled);
 
     public Jussen(string characters, string? ffpath, bool color, bool fill, bool infinite, IEnumerable<string> movies,
-        RenderMode renderMode = RenderMode.Ascii, int? sixelWidth = null, int? sixelHeight = null,
+        RenderMode renderMode = RenderMode.Ascii, int? imageWidth = null, int? imageHeight = null,
         bool fullWidth = false, int? colorReduction = null, BoxDrawingConverter? boxDrawing = null)
     {
         var ffmpegRoot = FFmpegLocator.Resolve(ffpath);
@@ -131,8 +131,8 @@ internal sealed class Jussen : IAsyncDisposable
         this.colorReduction = colorReduction;
         this.infinite = infinite;
         this.renderMode = renderMode;
-        this.sixelWidth = sixelWidth;
-        this.sixelHeight = sixelHeight;
+        this.imageWidth = imageWidth;
+        this.imageHeight = imageHeight;
         foreach (var path in movies) {
 #if WINDOWS
             if (path.StartsWith(WindowPrefix) ||
@@ -227,7 +227,7 @@ internal sealed class Jussen : IAsyncDisposable
         }
 
         using var terminal = RenderParams.Headless ? null : new TerminalSession();
-        using var probe = renderMode == RenderMode.Sixel && !RenderParams.Headless ? new TerminalSizeProbe() : null;
+        using var probe = renderMode is RenderMode.Sixel or RenderMode.Kitty && !RenderParams.Headless ? new TerminalSizeProbe() : null;
         AsciiArtConverter.Characters = characters;
         var stopwatch = Stopwatch.StartNew();
         Stats?.Start();
@@ -237,7 +237,8 @@ internal sealed class Jussen : IAsyncDisposable
             }
             IFrameRenderer renderer = renderMode switch {
                 RenderMode.Ascii => new AsciiFrameRenderer(color, fill, RenderParams, fullWidth, boxDrawing),
-                RenderMode.Sixel => new SixelFrameRenderer(sixelWidth, sixelHeight, probe, RenderParams, colorReduction),
+                RenderMode.Sixel => ImageFrameRenderer.Sixel(imageWidth, imageHeight, probe, RenderParams, colorReduction),
+                RenderMode.Kitty => ImageFrameRenderer.Kitty(imageWidth, imageHeight, probe, RenderParams),
                 _ => throw new ArgumentOutOfRangeException(nameof(renderMode))
             };
             renderer.EnableRecord(RecordFile != null);
@@ -320,6 +321,10 @@ internal sealed class Jussen : IAsyncDisposable
         }
         finally {
             Stats?.Stop();
+            if (renderMode == RenderMode.Kitty && !RenderParams.Headless) {
+                // 代替画面を抜ける前に端末側の画像を解放
+                Console.Write(KittyEncoder.DeleteSequence);
+            }
         }
     }
 

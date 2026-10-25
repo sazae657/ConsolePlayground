@@ -13,33 +13,14 @@ public static class SixelEncoder
     /// <param name="colors">減色後の色数(2～256)。null なら固定パレット</param>
     public static string Encode(SKBitmap frame, int maxWidth, int maxHeight, int? colors = null)
     {
-        ArgumentNullException.ThrowIfNull(frame);
-        if (frame.Width <= 0 || frame.Height <= 0 || frame.GetPixels() == IntPtr.Zero) {
-            throw new ArgumentException("画像が空", nameof(frame));
-        }
-        ValidateDimension(maxWidth, nameof(maxWidth));
-        ValidateDimension(maxHeight, nameof(maxHeight));
+        ValidateFrame(frame, maxWidth, maxHeight);
         if (colors is { } requested) {
             ValidateColors(requested, nameof(colors));
         }
 
-        // 縦横比を保ったまま枠いっぱいにリサイズ
-        int width;
-        int height;
-        if ((long)maxWidth * frame.Height <= (long)maxHeight * frame.Width) {
-            width = maxWidth;
-            height = (int)Math.Max(1, (long)maxWidth * frame.Height / frame.Width);
-        }
-        else {
-            height = maxHeight;
-            width = (int)Math.Max(1, (long)maxHeight * frame.Width / frame.Height);
-        }
-        using var bitmap = new SKBitmap(width, height, SKColorType.Bgra8888, SKAlphaType.Opaque);
-        using (var canvas = new SKCanvas(bitmap)) {
-            canvas.Clear(SKColors.Black);
-            using var image = SKImage.FromBitmap(frame);
-            canvas.DrawImage(image, new SKRect(0, 0, width, height), new SKSamplingOptions(SKFilterMode.Linear));
-        }
+        using var bitmap = ResizeToFit(frame, maxWidth, maxHeight);
+        int width = bitmap.Width;
+        int height = bitmap.Height;
 
         var (palette, pixels) = colors is { } reduced ? SixelQuantizer.Quantize(bitmap, reduced) : QuantizeFixed(bitmap);
         var usedColors = new bool[palette.Length];
@@ -113,6 +94,40 @@ public static class SixelEncoder
             }
         }
         return output.Append("\x1b\\").ToString();
+    }
+
+    /// <summary>
+    /// 縦横比を保ったまま枠いっぱいにリサイズし、透過部分は黒背景に合成する
+    /// </summary>
+    internal static SKBitmap ResizeToFit(SKBitmap frame, int maxWidth, int maxHeight)
+    {
+        int width;
+        int height;
+        if ((long)maxWidth * frame.Height <= (long)maxHeight * frame.Width) {
+            width = maxWidth;
+            height = (int)Math.Max(1, (long)maxWidth * frame.Height / frame.Width);
+        }
+        else {
+            height = maxHeight;
+            width = (int)Math.Max(1, (long)maxHeight * frame.Width / frame.Height);
+        }
+        var bitmap = new SKBitmap(width, height, SKColorType.Bgra8888, SKAlphaType.Opaque);
+        using (var canvas = new SKCanvas(bitmap)) {
+            canvas.Clear(SKColors.Black);
+            using var image = SKImage.FromBitmap(frame);
+            canvas.DrawImage(image, new SKRect(0, 0, width, height), new SKSamplingOptions(SKFilterMode.Linear));
+        }
+        return bitmap;
+    }
+
+    internal static void ValidateFrame(SKBitmap frame, int maxWidth, int maxHeight)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+        if (frame.Width <= 0 || frame.Height <= 0 || frame.GetPixels() == IntPtr.Zero) {
+            throw new ArgumentException("画像が空", nameof(frame));
+        }
+        ValidateDimension(maxWidth, nameof(maxWidth));
+        ValidateDimension(maxHeight, nameof(maxHeight));
     }
 
     private static readonly SKColor[] FixedPalette = CreateFixedPalette();
