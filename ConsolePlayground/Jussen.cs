@@ -74,7 +74,8 @@ internal sealed class Jussen : IAsyncDisposable
     private readonly bool fullWidth;
     // 罫線モードは前フレームの状態を持つ
     private readonly BoxDrawingConverter? boxDrawing;
-    private readonly bool colorReduction;
+    // Sixel減色の色数(null なら固定パレット)
+    private readonly int? colorReduction;
     private readonly bool infinite;
     private readonly RenderMode renderMode;
     private readonly int? sixelWidth;
@@ -119,7 +120,7 @@ internal sealed class Jussen : IAsyncDisposable
 
     public Jussen(string characters, string? ffpath, bool color, bool fill, bool infinite, IEnumerable<string> movies,
         RenderMode renderMode = RenderMode.Ascii, int? sixelWidth = null, int? sixelHeight = null,
-        bool fullWidth = false, bool colorReduction = false, BoxDrawingConverter? boxDrawing = null)
+        bool fullWidth = false, int? colorReduction = null, BoxDrawingConverter? boxDrawing = null)
     {
         var ffmpegRoot = FFmpegLocator.Resolve(ffpath);
         this.characters = characters;

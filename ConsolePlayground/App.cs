@@ -72,8 +72,22 @@ internal class App
         var height = new Option<int?>("--sixel-height") {
             Description = $"Sixelの最大高さ（1～{SixelEncoder.MaximumDimension}ピクセル、省略時は端末に合わせる）"
         };
-        var colorReduction = new Option<bool>("--color-reduction") {
-            Description = "Sixelでまあまあな品質の256色減色を使う(死ぬほど重い)"
+        var colorReduction = new Option<int?>("--color-reduction") {
+            Arity = ArgumentArity.ZeroOrOne,
+            Description = $"Sixelでまあまあな品質の減色を使う。色数は{SixelEncoder.MinimumColors}～{SixelEncoder.MaximumColors}"
+                + $"(省略時{SixelEncoder.MaximumColors}色、死ぬほど重い)",
+            CustomParser = result => {
+                // 値なしで指定されたら最大色数
+                if (result.Tokens.Count == 0) {
+                    return SixelEncoder.MaximumColors;
+                }
+                if (int.TryParse(result.Tokens[0].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)
+                    && value >= SixelEncoder.MinimumColors && value <= SixelEncoder.MaximumColors) {
+                    return value;
+                }
+                result.AddError($"--color-reduction は{SixelEncoder.MinimumColors}～{SixelEncoder.MaximumColors}で指定");
+                return null;
+            }
         };
         var record = new Option<string?>("--record")
         {

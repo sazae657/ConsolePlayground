@@ -94,7 +94,8 @@ internal sealed class AsciiFrameRenderer(bool color, bool fill, RenderParams ren
 }
 
 // probe はヘッドレス時は null(端末へ問い合わせない)
-internal sealed class SixelFrameRenderer(int? maxWidth, int? maxHeight, TerminalSizeProbe? probe, RenderParams renderParam, bool colorReduction = false) : IFrameRenderer
+// colorReduction は減色後の色数、null なら固定パレット
+internal sealed class SixelFrameRenderer(int? maxWidth, int? maxHeight, TerminalSizeProbe? probe, RenderParams renderParam, int? colorReduction = null) : IFrameRenderer
 {
     bool record = false;
     List<string> recordBuffer = new();
