@@ -83,7 +83,7 @@ internal sealed class TerminalSizeResponse
     }
 }
 
-internal static class SixelDisplaySize
+internal static class ImageDisplaySize
 {
     public static (int Width, int Height)? Calculate(int columns, int rows, TerminalCellSize? cell,
         int? maxWidth, int? maxHeight)

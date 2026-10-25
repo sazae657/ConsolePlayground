@@ -54,6 +54,9 @@ internal class App
         var sixel = new Option<bool>("--sixel") {
             Description = "sixelで表示(--renderer sixelと等価)"
         };
+        var kitty = new Option<bool>("--kitty") {
+            Description = "Kitty Graphics Protocolで表示(--renderer kittyと等価)"
+        };
         var infinite = new Option<bool>("--infinite")
         {
             Description = "無限"
@@ -64,13 +67,13 @@ internal class App
         };
         var renderer = new Option<string>("--renderer") {
             DefaultValueFactory = _ => "ascii",
-            Description = "描画方式: ascii か sixel"
+            Description = "描画方式: ascii か sixel か kitty"
         };
-        var width = new Option<int?>("--sixel-width") {
-            Description = $"Sixelの最大幅（1～{SixelEncoder.MaximumDimension}ピクセル、省略時は端末に合わせる）"
+        var width = new Option<int?>("--image-width", ["--sixel-width"]) {
+            Description = $"画像の最大幅（1～{SixelEncoder.MaximumDimension}ピクセル、省略時は端末に合わせる）"
         };
-        var height = new Option<int?>("--sixel-height") {
-            Description = $"Sixelの最大高さ（1～{SixelEncoder.MaximumDimension}ピクセル、省略時は端末に合わせる）"
+        var height = new Option<int?>("--image-height", ["--sixel-height"]) {
+            Description = $"画像の最大高さ（1～{SixelEncoder.MaximumDimension}ピクセル、省略時は端末に合わせる）"
         };
         var colorReduction = new Option<int?>("--color-reduction") {
             Arity = ArgumentArity.ZeroOrOne,
@@ -156,6 +159,7 @@ internal class App
             fullWidth,
             boxDrawing, boxRound, boxFill, boxThin, boxNoDiagonal,
             sixel,
+            kitty,
             infinite,
             ffmpegPath,
             width,
@@ -181,24 +185,26 @@ internal class App
                 result.AddError("--movieの指定がない");
             }
 
-            string mode = result.GetResult(renderer)?.Tokens.FirstOrDefault()?.Value ?? "ascii";
-            var sixelAliased = result.GetValue(sixel);
-            if (sixelAliased) {
-                mode = "sixel";
+            if (result.GetValue(sixel) && result.GetValue(kitty)) {
+                result.AddError("--sixel と --kitty は同時に指定できない");
             }
-            bool isSixel = string.Equals(mode, "sixel", StringComparison.OrdinalIgnoreCase);
-            if (!isSixel && !string.Equals(mode, "ascii", StringComparison.OrdinalIgnoreCase)) {
-                result.AddError("--renderer は ascii または sixel を指定");
+            string? rendererName = result.GetResult(renderer)?.Tokens.FirstOrDefault()?.Value;
+            var parsedMode = ParseRenderMode(rendererName, result.GetValue(sixel), result.GetValue(kitty));
+            if (parsedMode == null) {
+                result.AddError("--renderer は ascii、sixel、kitty のいずれかを指定");
             }
-            if (isSixel) {
+            var mode = parsedMode ?? RenderMode.Ascii;
+            bool isSixel = mode == RenderMode.Sixel;
+            bool isImage = mode != RenderMode.Ascii;
+            if (isImage) {
                 foreach (var option in new Option[] { characters, color, fill, fullWidth, boxDrawing, boxRound, boxFill, boxThin, boxNoDiagonal }) {
                     if (result.GetResult(option) is { Implicit: false }) {
-                        result.AddError($"{option.Name} はASCII専用なのでsixelと併用できない");
+                        result.AddError($"{option.Name} はASCII専用なので画像表示と併用できない");
                     }
                 }
             }
             else if (result.GetResult(width) is { Implicit: false } || result.GetResult(height) is { Implicit: false }) {
-                result.AddError("--sixel-width と --sixel-height には --renderer sixel が必要");
+                result.AddError("--image-width と --image-height には --renderer sixel または kitty が必要");
             }
             if (!isSixel && result.GetResult(colorReduction) is { Implicit: false }) {
                 result.AddError("--color-reduction には --renderer sixel または --sixel が必要");
@@ -210,7 +216,7 @@ internal class App
                     result.AddError($"{option.Name} は1～{SixelEncoder.MaximumDimension}で指定");
                 }
             }
-            if (!isSixel && result.GetResult(characters) is { Tokens.Count: 1 } characterResult
+            if (!isImage && result.GetResult(characters) is { Tokens.Count: 1 } characterResult
                 && characterResult.Tokens[0].Value.Length == 0) {
                 result.AddError("--characters が空");
             }
@@ -248,13 +254,8 @@ internal class App
                 if (!result.GetValue(headless) && Console.IsOutputRedirected) {
                     throw new InvalidOperationException("標準出力へのリダイレクトは使用できない");
                 }
-                var mode = string.Equals(result.GetValue(renderer), "sixel", StringComparison.OrdinalIgnoreCase)
-                    ? RenderMode.Sixel : RenderMode.Ascii;
-
-                var sixelAliased = result.GetValue(sixel);
-                if (sixelAliased) {
-                    mode = RenderMode.Sixel;
-                }
+                var mode = ParseRenderMode(result.GetValue(renderer), result.GetValue(sixel), result.GetValue(kitty))
+                    ?? RenderMode.Ascii;
                 var rec = result.GetValue(record);
 
                 await using var player = new Jussen(
@@ -296,6 +297,30 @@ internal class App
             }
         });
         return root;
+    }
+
+
+    /// <summary>
+    /// --renderer と別名オプションから描画方式を決める。不明な名前なら null
+    /// </summary>
+    /// <param name="name"></param>
+    /// <param name="sixel"></param>
+    /// <param name="kitty"></param>
+    /// <returns></returns>
+    internal static RenderMode? ParseRenderMode(string? name, bool sixel, bool kitty)
+    {
+        if (sixel) {
+            return RenderMode.Sixel;
+        }
+        if (kitty) {
+            return RenderMode.Kitty;
+        }
+        return (name ?? "ascii").ToLowerInvariant() switch {
+            "ascii" => RenderMode.Ascii,
+            "sixel" => RenderMode.Sixel,
+            "kitty" => RenderMode.Kitty,
+            _ => null
+        };
     }
 
 #if WINDOWS
