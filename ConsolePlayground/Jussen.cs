@@ -111,10 +111,24 @@ internal sealed class Jussen : IAsyncDisposable
     /// </summary>
     public PlaybackStats? Stats { get; set; }
 
+    /// <summary>
+    /// 輝度を使ってグレースケールで表示する
+    /// </summary>
+    public bool Brightness { get; set; }
+
+    /// <summary>
+    /// BCGYR
+    /// </summary>
+    public bool Bcgyr { get; set; }
+
     Services.TelnetServer? server;
 
+#if WINDOWS
     public const string WindowPrefix = "w://";
     public const string MonitorPrefix = "m://";
+
+    public Imoging.Platform.WindowCaptureOptions WindowCaptureOptions { get; set; } = new();
+#endif
 
     readonly Regex WCLASS = new Regex(@"\A0x[0-9A-Fa-f]+\Z", RegexOptions.Compiled);
 
@@ -151,7 +165,7 @@ internal sealed class Jussen : IAsyncDisposable
         DynamicallyLoadedBindings.Initialize();
     }
 
-    IImageSource CreateReader(string path) {
+    Task<IImageSource> CreateReader(string path) {
 #if WINDOWS
         if (path.StartsWith(WindowPrefix)) {
             return CreateWindowSource(path);
@@ -160,11 +174,11 @@ internal sealed class Jussen : IAsyncDisposable
             return CreateMonitorSource(path);
         }
 #endif
-        return new VideoReadment(path);
+        return Task.FromResult<IImageSource>(new VideoReadment(path));
     }
 
 #if WINDOWS
-    IImageSource CreateWindowSource(string path)
+    async Task<IImageSource> CreateWindowSource(string path)
     {
         var ms = path.Substring(WindowPrefix.Length).Trim();
         IntPtr handle;
@@ -178,20 +192,20 @@ internal sealed class Jussen : IAsyncDisposable
             }
             handle = wt.Handle;
         }
-        var mc = new Imoging.Platform.WindowCapture(handle);
-        mc.Start();
+        var mc = new Imoging.Platform.WindowCapture(WindowCaptureOptions, handle);
+        await mc.Start();
         return mc;
     }
 
-    IImageSource CreateMonitorSource(string path)
+    async Task<IImageSource> CreateMonitorSource(string path)
     {
         var ms = @"\\.\" + path.Substring(MonitorPrefix.Length).Trim();
         var wt = Imoging.Platform.MonitorEnumerator.GetMonitors().FirstOrDefault(w => w.DeviceName == ms);
         if (wt == null) {
             throw new Exception($"{ms} そのモニターない");
         }
-        var mc = new Imoging.Platform.WindowCapture(wt);
-        mc.Start();
+        var mc = new Imoging.Platform.WindowCapture(WindowCaptureOptions, wt);
+        await mc.Start();
         return mc;
     }
 #endif
@@ -236,7 +250,7 @@ internal sealed class Jussen : IAsyncDisposable
                 await probe.InitializeAsync(token);
             }
             IFrameRenderer renderer = renderMode switch {
-                RenderMode.Ascii => new AsciiFrameRenderer(color, fill, RenderParams, fullWidth, boxDrawing),
+                RenderMode.Ascii => new AsciiFrameRenderer(color, fill, RenderParams, fullWidth, boxDrawing, colorReduction),
                 RenderMode.Sixel => ImageFrameRenderer.Sixel(imageWidth, imageHeight, probe, RenderParams, colorReduction),
                 RenderMode.Kitty => ImageFrameRenderer.Kitty(imageWidth, imageHeight, probe, RenderParams),
                 _ => throw new ArgumentOutOfRangeException(nameof(renderMode))
@@ -246,7 +260,7 @@ internal sealed class Jussen : IAsyncDisposable
                 token.ThrowIfCancellationRequested();
                 foreach (var movie in movies) {
                     token.ThrowIfCancellationRequested();
-                    using var reader = CreateReader(movie);
+                    using var reader = await CreateReader(movie);
                     if (!reader.IsValid()) {
                         continue;
                     }
@@ -271,6 +285,9 @@ internal sealed class Jussen : IAsyncDisposable
                         string frame = reader.Frame(f => {
                             if (f == null) {
                                 return string.Empty;
+                            }
+                            if (Brightness || Bcgyr) {
+                                GrayscaleFilter.Apply(f, Bcgyr);
                             }
                             return renderer.Encode(f);
                         });

@@ -1,21 +1,21 @@
 ﻿#if WINDOWS
 using SkiaSharp;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
-using System.Text;
-using Windows.Graphics;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
 using Windows.Graphics.DirectX.Direct3D11;
 using Windows.Graphics.Imaging;
 using WinRT;
-using ConsolePlayground.Cmd.Imoging;
-
 namespace ConsolePlayground.Cmd.Imoging.Platform;
+
+/// <summary>
+/// オプション
+/// </summary>
+/// <param name="Borderless">黄色い枠線出さない</param>
+/// <param name="NoFrame">クライアント領域のみキャプチャー</param>
+public sealed record WindowCaptureOptions(bool Borderless =false, bool NoFrame = false);
 
 public sealed class WindowCapture : IDisposable, IImageSource {
     private readonly IDirect3DDevice device;
@@ -34,16 +34,19 @@ public sealed class WindowCapture : IDisposable, IImageSource {
     bool closed;
     // ウインドウ生存確認の間隔
     static readonly TimeSpan closedPollInterval = TimeSpan.FromMilliseconds(100);
+    WindowCaptureOptions options;
 
-    public WindowCapture(IntPtr hwnd) {
+    public WindowCapture(WindowCaptureOptions opt, IntPtr hwnd) {
         this.hwnd = hwnd;
+        options = opt;
         device = Interop.CreateDirect3DDevice();
         item = Interop.CreateItemForWindow(hwnd);
         lastSize = item.Size;
     }
-    public WindowCapture(MonitorInfo mon)
+    public WindowCapture(WindowCaptureOptions opt, MonitorInfo mon)
     {
         this.hwnd = IntPtr.Zero;
+        options = opt;
         device = Interop.CreateDirect3DDevice();
         item = Interop.CreateItemForMonitor(mon.HMonitor);
         lastSize.Width = mon.MonitorArea.Right - mon.MonitorArea.Left;
@@ -52,7 +55,7 @@ public sealed class WindowCapture : IDisposable, IImageSource {
 
     public bool IsValid() => true;
 
-    public void Start() {
+    public async Task Start() {
         stopwatch.Start();
         pool = Direct3D11CaptureFramePool.CreateFreeThreaded(
             device, DirectXPixelFormat.B8G8R8A8UIntNormalized, 2, lastSize);
@@ -60,9 +63,11 @@ public sealed class WindowCapture : IDisposable, IImageSource {
 
         session = pool.CreateCaptureSession(item);
         session.IsCursorCaptureEnabled = false;
-        // 黄色い枠消し(GraphicsCaptureAccess.RequestAccessAsync&manifestが必要でめんどいので保留)
-        //await GraphicsCaptureAccess.RequestAccessAsync(GraphicsCaptureAccessKind.Borderless);
-        // session.IsBorderRequired = false;
+        if (options.Borderless) {
+            // 黄色い枠消し
+            await GraphicsCaptureAccess.RequestAccessAsync(GraphicsCaptureAccessKind.Borderless);
+            session.IsBorderRequired = false;
+        }
         session.StartCapture();
     }
 
@@ -90,15 +95,35 @@ public sealed class WindowCapture : IDisposable, IImageSource {
             var pixels = new byte[w * h * 4];
             sb.CopyToBuffer(pixels.AsBuffer());
 
-            var bmp = new SKBitmap(new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Premul));
-            Marshal.Copy(pixels, 0, bmp.GetPixels(), pixels.Length);
-
             var cs = frame.ContentSize;
             if (cs.Width != lastSize.Width || cs.Height != lastSize.Height) {
                 lastSize = cs;
                 // ウインドウサイズが変わったのでフレームプールを作り直し
                 sender.Recreate(device, DirectXPixelFormat.B8G8R8A8UIntNormalized, 2, cs);
             }
+
+            int left = 0, top = 0;
+            int right = Math.Min(w, cs.Width), bottom = Math.Min(h, cs.Height);
+            if (options.NoFrame && hwnd != IntPtr.Zero && Interop.TryGetClientRectInFrame(hwnd, out var client)) {
+                // NoFrame指定はクライアント領域でクロップ
+                int cl = Math.Max(left, client.Left), ct = Math.Max(top, client.Top);
+                int cr = Math.Min(right, client.Right), cb = Math.Min(bottom, client.Bottom);
+                if (cr > cl && cb > ct) {
+                    (left, top, right, bottom) = (cl, ct, cr, cb);
+                }
+            }
+            int cropW = right - left, cropH = bottom - top;
+            if (cropW <= 0 || cropH <= 0) {
+                return;
+            }
+
+            var bmp = new SKBitmap(new SKImageInfo(cropW, cropH, SKColorType.Bgra8888, SKAlphaType.Premul));
+            var dst = bmp.GetPixels();
+            int rowBytes = bmp.RowBytes;
+            for (int y = 0; y < cropH; y++) {
+                Marshal.Copy(pixels, ((top + y) * w + left) * 4, dst + y * rowBytes, cropW * 4);
+            }
+
             lock (lockObzekt) {
                 if (disposed) {
                     bmp.Dispose();
@@ -192,6 +217,68 @@ public sealed class WindowCapture : IDisposable, IImageSource {
 
         [DllImport("d3d11.dll")]
         private static extern int CreateDirect3D11DeviceFromDXGIDevice(IntPtr dxgiDevice, out IntPtr graphicsDevice);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct RECT {
+            public int Left, Top, Right, Bottom;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT {
+            public int X, Y;
+        }
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr dpiContext);
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+
+        private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+        private static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = new(-4);
+
+
+        /// <summary>
+        /// クライアント領域の矩形を取得
+        /// </summary>
+        /// <param name="hwnd"></param>
+        /// <param name="rect"></param>
+        /// <returns></returns>
+        public static unsafe bool TryGetClientRectInFrame(IntPtr hwnd, out RECT rect) {
+            rect = default;
+            // WGCと同じ物理ピクセルで取らないとズレるので、一時的にスレッドのDPIコンテキストを切り替える
+            var oldContext = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+            try {
+                if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out var frame, sizeof(RECT)) != 0) {
+                    return false;
+                }
+                if (!GetClientRect(hwnd, out var client)) {
+                    return false;
+                }
+                var origin = new POINT();
+                if (!ClientToScreen(hwnd, ref origin)) {
+                    return false;
+                }
+                rect.Left = origin.X - frame.Left;
+                rect.Top = origin.Y - frame.Top;
+                rect.Right = rect.Left + (client.Right - client.Left);
+                rect.Bottom = rect.Top + (client.Bottom - client.Top);
+                return rect.Right > rect.Left && rect.Bottom > rect.Top;
+            }
+            finally {
+                if (oldContext != IntPtr.Zero) {
+                    SetThreadDpiAwarenessContext(oldContext);
+                }
+            }
+        }
 
         private const int D3D_DRIVER_TYPE_HARDWARE = 1;
         private const uint D3D11_CREATE_DEVICE_BGRA_SUPPORT = 0x20;

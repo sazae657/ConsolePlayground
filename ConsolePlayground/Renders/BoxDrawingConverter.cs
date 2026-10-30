@@ -92,9 +92,10 @@ public sealed class BoxDrawingConverter {
     /// <param name="rows"></param>
     /// <param name="columns"></param>
     /// <param name="color">ANSIカラーで各文字を着色する場合はtrue。</param>
+    /// <param name="colors">着色時の減色後の色数(2～256)。null なら減色しない</param>
     /// <returns></returns>
     /// <exception cref="ArgumentException"></exception>
-    public string Convert(SKBitmap frame, int rows, int columns, bool color = false) {
+    public string Convert(SKBitmap frame, int rows, int columns, bool color = false, int? colors = null) {
         ArgumentNullException.ThrowIfNull(frame);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(rows);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(columns);
@@ -153,6 +154,9 @@ public sealed class BoxDrawingConverter {
             }
         }
 
+        var reduced = color && colors is { } count
+            ? AsciiArtConverter.ReduceCellColors(rows, columns, (row, column) => SampleCell(work, row, column), count)
+            : null;
         var result = new StringBuilder(AsciiArtConverter.EstimateCapacity(rows, columns, 1, color));
         for (int row = 0; row < rows; row++) {
             if (row > 0) {
@@ -166,7 +170,7 @@ public sealed class BoxDrawingConverter {
                 int left = horizontalWeight[row * (columns + 1) + column];
                 int right = horizontalWeight[row * (columns + 1) + column + 1];
                 if (color) {
-                    var pixel = work.GetPixel(column * CellWidth + CellWidth / 2, row * CellHeight + CellHeight / 2);
+                    var pixel = reduced?[row * columns + column] ?? SampleCell(work, row, column);
                     AsciiArtConverter.AppendColor(result, pixel, ref lastColor);
                 }
 
@@ -195,6 +199,12 @@ public sealed class BoxDrawingConverter {
 
         return result.ToString();
     }
+
+    /// <summary>
+    /// 作業用画像からセルの中心の画素を取る
+    /// </summary>
+    private static SKColor SampleCell(SKBitmap work, int row, int column)
+        => work.GetPixel(column * CellWidth + CellWidth / 2, row * CellHeight + CellHeight / 2);
 
 
     /// <summary>

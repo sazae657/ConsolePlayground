@@ -24,19 +24,20 @@ internal interface IFrameRenderer
     void Render(string frame, int index, TimeSpan timestamp, double frameRate);
 }
 
+// colorReduction は着色時の減色後の色数、null なら減色しない
 internal sealed class AsciiFrameRenderer(bool color, bool fill, RenderParams renderParam, bool fullWidth = false,
-    BoxDrawingConverter? boxDrawingConverter = null) : IFrameRenderer
+    BoxDrawingConverter? boxDrawingConverter = null, int? colorReduction = null) : IFrameRenderer
 {
     public string Encode(SKBitmap frame)
     {
         var (rows, columns) = CalculateGrid(renderParam.RenderWidth, renderParam.RenderHeight,
             frame.Width, frame.Height, fullWidth, renderParam.ShowInfo);
         if (boxDrawingConverter != null) {
-            return boxDrawingConverter.Convert(frame, rows, columns, color);
+            return boxDrawingConverter.Convert(frame, rows, columns, color, colorReduction);
         }
         return fill
-            ? AsciiArtConverter.ConvertColor(frame, rows, columns)
-            : AsciiArtConverter.Convert(frame, rows, columns, color, fullWidth);
+            ? AsciiArtConverter.ConvertColor(frame, rows, columns, colorReduction)
+            : AsciiArtConverter.Convert(frame, rows, columns, color, fullWidth, colorReduction);
     }
 
     bool record = false;
