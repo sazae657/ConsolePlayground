@@ -11,9 +11,20 @@ internal static class SixelQuantizer
     /// <param name="colors">パレットの最大色数(2～256)</param>
     /// <returns></returns>
     internal static (SKColor[] Palette, byte[] Pixels) Quantize(SKBitmap bitmap, int colors = SixelEncoder.MaximumColors)
+        => Quantize(bitmap.Pixels, bitmap.Width, colors);
+
+    /// <summary>
+    /// 減色(画素配列)
+    /// </summary>
+    /// <param name="source"></param>
+    /// <param name="width"></param>
+    /// <param name="colors">パレットの最大色数(2～256)</param>
+    /// <returns></returns>
+    internal static (SKColor[] Palette, byte[] Pixels) Quantize(SKColor[] source, int width, int colors = SixelEncoder.MaximumColors)
     {
         SixelEncoder.ValidateColors(colors, nameof(colors));
-        var source = bitmap.Pixels;
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+        int height = source.Length / width;
         var exact = new Dictionary<SKColor, byte>();
         foreach (var color in source) {
             var rounded = ToDisplayColor(color.Red, color.Green, color.Blue);
@@ -56,10 +67,9 @@ internal static class SixelQuantizer
         var palette = boxes.Select(box => box.Average()).ToArray();
         var nearest = new short[64 * 64 * 64];
         Array.Fill(nearest, (short)-1);
-        int width = bitmap.Width;
         var current = new float[(width + 2) * 3];
         var next = new float[current.Length];
-        for (int y = 0; y < bitmap.Height; y++) {
+        for (int y = 0; y < height; y++) {
             int direction = y % 2 == 0 ? 1 : -1;
             for (int step = 0; step < width; step++) {
                 int x = direction == 1 ? step : width - 1 - step;

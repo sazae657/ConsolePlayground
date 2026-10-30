@@ -57,6 +57,14 @@ internal class App
         var kitty = new Option<bool>("--kitty") {
             Description = "Kitty Graphics Protocolで表示(--renderer kittyと等価)"
         };
+        var brightness = new Option<bool>("--brightness") {
+            Description = "輝度を使ってグレースケールで表示する"
+        };
+        var brightnessBcgyr = new Option<bool>("--brightness-bcgyr")
+        {
+            Description = "輝度を使ってBCGYRで表示する"
+        };
+
         var infinite = new Option<bool>("--infinite")
         {
             Description = "無限"
@@ -77,7 +85,7 @@ internal class App
         };
         var colorReduction = new Option<int?>("--color-reduction") {
             Arity = ArgumentArity.ZeroOrOne,
-            Description = $"Sixelでまあまあな品質の減色を使う。色数は{SixelEncoder.MinimumColors}～{SixelEncoder.MaximumColors}"
+            Description = $"まあまあな品質の減色を使う。色数は{SixelEncoder.MinimumColors}～{SixelEncoder.MaximumColors}"
                 + $"(省略時{SixelEncoder.MaximumColors}色、死ぬほど重い)",
             CustomParser = result => {
                 // 値なしで指定されたら最大色数
@@ -139,6 +147,16 @@ internal class App
         };
 
 #if WINDOWS
+        var noCaptureBorder = new Option<bool>("--no-capture-border")
+        {
+            Description = "黄色い枠線を出さない(薄気味悪い)",
+            DefaultValueFactory = _ => false
+        };
+        var noWindowFrame = new Option<bool>("--no-window-frame")
+        {
+            Description = "クライアント領域のみキャプチャー",
+            DefaultValueFactory = _ => false
+        };
         var windowList = new Option<bool>("--list-window")
         {
             Description = "ウインドウリスト表示",
@@ -150,7 +168,7 @@ internal class App
         };
 #endif
 
-        var root = new RootCommand(nameof(ConsolePlayground)) {
+        var root = new RootCommand(nameof(ConsolePlayground.Cmd)) {
             movies,
             renderer,
             characters,
@@ -160,6 +178,8 @@ internal class App
             boxDrawing, boxRound, boxFill, boxThin, boxNoDiagonal,
             sixel,
             kitty,
+            brightness,
+            brightnessBcgyr,
             infinite,
             ffmpegPath,
             width,
@@ -173,6 +193,7 @@ internal class App
             headless, headlessWidth, headlessHeight,
             benchmark,
 #if WINDOWS
+            noCaptureBorder,noWindowFrame,
             windowList, monitorList
 #endif
         };
@@ -206,8 +227,10 @@ internal class App
             else if (result.GetResult(width) is { Implicit: false } || result.GetResult(height) is { Implicit: false }) {
                 result.AddError("--image-width と --image-height には --renderer sixel または kitty が必要");
             }
-            if (!isSixel && result.GetResult(colorReduction) is { Implicit: false }) {
-                result.AddError("--color-reduction には --renderer sixel または --sixel が必要");
+            // ASCIIは着色するときだけ減色の意味がある
+            bool reducible = isSixel || (!isImage && (result.GetValue(color) || result.GetValue(fill)));
+            if (!reducible && result.GetResult(colorReduction) is { Implicit: false }) {
+                result.AddError("--color-reduction には --sixel か、ASCIIの --color / --fill が必要");
             }
             foreach (var option in new[] { width, height }) {
                 string? text = result.GetResult(option)?.Tokens.FirstOrDefault()?.Value;
@@ -275,6 +298,8 @@ internal class App
                     RecordingFormat = result.GetValue(recordFormat),
                     Listen = result.GetValue(listen),
                     ListenRemote = result.GetValue(listenRemote),
+                    Brightness = result.GetValue(brightness),
+                    Bcgyr = result.GetValue(brightnessBcgyr),
                 };
                 player.RenderParams.ShowInfo = result.GetValue(showInfo);
                 player.RenderParams.Headless = result.GetValue(headless);
@@ -283,6 +308,11 @@ internal class App
                 if (result.GetValue(benchmark)) {
                     player.Stats = new PlaybackStats();
                 }
+#if WINDOWS
+                player.WindowCaptureOptions = new Imoging.Platform.WindowCaptureOptions(
+                    Borderless: result.GetValue(noCaptureBorder), NoFrame:result.GetValue(noWindowFrame)
+                );
+#endif
 
                 await player.Run(cancellationToken);
                 if (player.Stats != null) {
